@@ -5,8 +5,7 @@ import { gitaVerses, famousStories, motivationalQuotes, dailyAffirmations } from
 // Speak AS Lord Krishna himself — his voice, his wisdom, his love
 // ═══════════════════════════════════════════════════════════════
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
+const API_KEY = null; // Replaced centrally by secure serverless function in /api/chat
 
 // ───────────────────────────────────────────────────
 // MODEL FALLBACK CHAIN — Tries multiple free models
@@ -211,23 +210,15 @@ export async function sendToLLM(messages, onChunk) {
         console.log(`[Yours Krishna] 🙏 Trying model: ${model}`);
 
         try {
-            const response = await fetch(OPENROUTER_API_URL, {
+            // Send requests strictly to our secure Vercel Edge proxy where the Key is hidden
+            const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${API_KEY}`,
                     'Content-Type': 'application/json',
-                    'HTTP-Referer': window.location.origin,
-                    'X-Title': 'Yours Krishna',
                 },
                 body: JSON.stringify({
                     model: model,
                     messages: apiMessages,
-                    stream: true,
-                    temperature: 0.9,
-                    max_tokens: 1500,
-                    top_p: 0.95,
-                    frequency_penalty: 0.3,
-                    presence_penalty: 0.4,
                 }),
             });
 
@@ -283,9 +274,9 @@ export async function sendToLLM(messages, onChunk) {
         }
     }
 
-    console.warn('[Yours Krishna] 🔄 All models exhausted. Returning error to user.');
+    console.warn('[Yours Krishna] 🔄 Secure backend proxy failed to connect. Ensure your API Key is stored on the Vercel Dashboard');
     return {
-        text: `My dear child, I am having trouble reaching the cosmic servers (Your OpenRouter API Key is rejecting the request or is out of credits). Please check your **.env** file and make sure \`VITE_OPENROUTER_API_KEY\` is valid and your OpenRouter account is active. I cannot speak continuously without it. \n\nUntil then, here is some eternal wisdom: ${fallbackResponse(messages[messages.length - 1]?.text || '')}`,
+        text: `My dear child, the secure backend has not been fully awakened yet. Please ensure you have imported this repository into Vercel and added your OpenRouter API Key to its secure Environment Variables. \n\nUntil then, here is some eternal wisdom: ${fallbackResponse(messages[messages.length - 1]?.text || '')}`,
         isLLM: false
     };
 }
