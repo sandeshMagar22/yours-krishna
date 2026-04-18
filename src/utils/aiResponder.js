@@ -260,39 +260,56 @@ export async function sendToLLM(messages, onChunk) {
         }
     }
 
-    // 2. Production Public Mode — Use keyless Pollinations AI natively!
-    console.log(`[Yours Krishna] 🙏 Awaking Public Keyless LLM...`);
+    // 2. Production Mode — Send requests strictly to our secure Vercel Edge proxy where the Key is hidden
+    console.log(`[Yours Krishna] 🙏 Awaking secure Vercel backend proxy...`);
     try {
-        const response = await fetch('https://text.pollinations.ai/', {
+        const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                messages: apiMessages,
-                seed: Math.floor(Math.random() * 1000000)
-            }),
+            body: JSON.stringify({ model: FREE_MODELS[0], messages: apiMessages }), // Let backend use primary model
         });
 
+        if (response.status === 429 || response.status === 404 || response.status === 503) {
+            throw new Error("Backend rate limited or exhausted.");
+        }
+
         if (response.ok) {
-            const fullText = await response.text();
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            let buffer = '';
 
-            // Hand-crafted streaming simulation for smooth UI experience
-            let currentText = '';
-            for (let i = 0; i < fullText.length; i += 2) {
-                currentText += fullText.slice(i, i + 2);
-                if (onChunk) onChunk(currentText);
-                await new Promise(r => setTimeout(r, 15));
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed || trimmed === 'data: [DONE]') continue;
+                    if (!trimmed.startsWith('data: ')) continue;
+                    try {
+                        const json = JSON.parse(trimmed.slice(6));
+                        const delta = json.choices?.[0]?.delta?.content;
+                        if (delta) {
+                            fullText += delta;
+                            if (onChunk) onChunk(fullText);
+                        }
+                    } catch (e) { }
+                }
             }
-            if (onChunk) onChunk(fullText);
-
-            return { text: fullText, isLLM: true, model: 'pollinations' };
+            if (fullText) return { text: fullText, isLLM: true, model: 'vercel-proxy' };
         }
     } catch (error) {
-        console.error(`[Yours Krishna] ❌ Public Keyless LLM failed:`, error);
+        console.error(`[Yours Krishna] ❌ Vercel Proxy failed:`, error);
     }
 
-    console.warn('[Yours Krishna] 🔄 Public Keyless LLM failed. Using offline Krishna fallback wisdom.');
+    console.warn('[Yours Krishna] 🔄 Secure backend proxy failed to connect. Ensure your API Key is stored on the Vercel Dashboard');
     return {
-        text: `My dear child, the cosmic winds are currently blocking my connection to the divine. \n\nUntil the connection is restored, here is some eternal wisdom: ${fallbackResponse(messages[messages.length - 1]?.text || '')}`,
+        text: `My dear child, the secure backend has not been fully awakened yet. Please ensure you have imported this repository into Vercel and added your OpenRouter API Key to its secure Environment Variables. \n\nUntil then, here is some eternal wisdom: ${fallbackResponse(messages[messages.length - 1]?.text || '')}`,
         isLLM: false
     };
 }
