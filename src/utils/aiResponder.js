@@ -5,7 +5,8 @@ import { gitaVerses, famousStories, motivationalQuotes, dailyAffirmations } from
 // Speak AS Lord Krishna himself — his voice, his wisdom, his love
 // ═══════════════════════════════════════════════════════════════
 
-const API_KEY = null; // Replaced centrally by secure serverless function in /api/chat
+const IS_DEV = import.meta.env.DEV;
+const LOCAL_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
 
 // ───────────────────────────────────────────────────
 // MODEL FALLBACK CHAIN — Tries multiple free models
@@ -210,17 +211,25 @@ export async function sendToLLM(messages, onChunk) {
         console.log(`[Yours Krishna] 🙏 Trying model: ${model}`);
 
         try {
-            // Send requests strictly to our secure Vercel Edge proxy where the Key is hidden
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: apiMessages,
-                }),
-            });
+            let response;
+            if (IS_DEV && LOCAL_API_KEY) {
+                // Local development mode — skip the Vercel proxy to allow offline testing
+                response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${LOCAL_API_KEY}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ model, messages: apiMessages, stream: true }),
+                });
+            } else {
+                // Production mode — Send requests strictly to our secure Vercel Edge proxy where the Key is hidden
+                response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model, messages: apiMessages }),
+                });
+            }
 
             if (response.status === 429 || response.status === 404 || response.status === 503) {
                 console.warn(`[Yours Krishna] ⚠️ Model ${model} returned ${response.status}, trying next...`);
