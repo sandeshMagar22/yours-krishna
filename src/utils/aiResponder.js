@@ -205,16 +205,14 @@ export async function sendToLLM(messages, onChunk) {
         })),
     ];
 
-    // Try each model in the fallback chain
-    for (let i = 0; i < FREE_MODELS.length; i++) {
-        const model = FREE_MODELS[i];
-        console.log(`[Yours Krishna] 🙏 Trying model: ${model}`);
+    // 1. Try local OpenRouter if key is present
+    if (IS_DEV && LOCAL_API_KEY) {
+        for (let i = 0; i < FREE_MODELS.length; i++) {
+            const model = FREE_MODELS[i];
+            console.log(`[Yours Krishna] 🙏 Trying local OpenRouter model: ${model}`);
 
-        try {
-            let response;
-            if (IS_DEV && LOCAL_API_KEY) {
-                // Local development mode — skip the Vercel proxy to allow offline testing
-                response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            try {
+                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${LOCAL_API_KEY}`,
@@ -222,70 +220,79 @@ export async function sendToLLM(messages, onChunk) {
                     },
                     body: JSON.stringify({ model, messages: apiMessages, stream: true }),
                 });
-            } else {
-                // Production mode — Send requests strictly to our secure Vercel Edge proxy where the Key is hidden
-                response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model, messages: apiMessages }),
-                });
-            }
 
-            if (response.status === 429 || response.status === 404 || response.status === 503) {
-                console.warn(`[Yours Krishna] ⚠️ Model ${model} returned ${response.status}, trying next...`);
-                continue;
-            }
+                if (response.status === 429 || response.status === 404 || response.status === 503) continue;
+                if (!response.ok) continue;
 
-            if (!response.ok) {
-                const err = await response.text();
-                console.error(`[Yours Krishna] ❌ Model ${model} error:`, err);
-                continue;
-            }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullText = '';
+                let buffer = '';
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let fullText = '';
-            let buffer = '';
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed || trimmed === 'data: [DONE]') continue;
-                    if (!trimmed.startsWith('data: ')) continue;
-
-                    try {
-                        const json = JSON.parse(trimmed.slice(6));
-                        const delta = json.choices?.[0]?.delta?.content;
-                        if (delta) {
-                            fullText += delta;
-                            if (onChunk) onChunk(fullText);
-                        }
-                    } catch (e) {
-                        // Skip malformed chunks
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed || trimmed === 'data: [DONE]') continue;
+                        if (!trimmed.startsWith('data: ')) continue;
+                        try {
+                            const json = JSON.parse(trimmed.slice(6));
+                            const delta = json.choices?.[0]?.delta?.content;
+                            if (delta) {
+                                fullText += delta;
+                                if (onChunk) onChunk(fullText);
+                            }
+                        } catch (e) { }
                     }
                 }
+                if (fullText) {
+                    return { text: fullText, isLLM: true, model: model };
+                }
+            } catch (error) {
+                console.error(`[Yours Krishna] ❌ Model ${model} failed:`, error);
             }
-
-            if (fullText) {
-                console.log(`[Yours Krishna] ✅ Krishna spoke through ${model} (${fullText.length} chars)`);
-                return { text: fullText, isLLM: true, model: model };
-            }
-        } catch (error) {
-            console.error(`[Yours Krishna] ❌ Model ${model} failed:`, error);
-            continue;
         }
     }
 
-    console.warn('[Yours Krishna] 🔄 Secure backend proxy failed to connect. Ensure your API Key is stored on the Vercel Dashboard');
+    // 2. Production Public Mode — Use keyless Pollinations AI natively!
+    console.log(`[Yours Krishna] 🙏 Awaking Public Keyless LLM...`);
+    try {
+        const response = await fetch('https://text.pollinations.ai/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messages: apiMessages,
+                seed: Math.floor(Math.random() * 1000000)
+            }),
+        });
+
+        if (response.ok) {
+            const fullText = await response.text();
+
+            // Hand-crafted streaming simulation for smooth UI experience
+            let currentText = '';
+            for (let i = 0; i < fullText.length; i += 2) {
+                currentText += fullText.slice(i, i + 2);
+                if (onChunk) onChunk(currentText);
+                await new Promise(r => setTimeout(r, 15));
+            }
+            if (onChunk) onChunk(fullText);
+
+            return { text: fullText, isLLM: true, model: 'pollinations' };
+        }
+    } catch (error) {
+        console.error(`[Yours Krishna] ❌ Public Keyless LLM failed:`, error);
+    }
+
+    console.warn('[Yours Krishna] 🔄 Public Keyless LLM failed. Using offline Krishna fallback wisdom.');
     return {
-        text: `My dear child, the secure backend has not been fully awakened yet. Please ensure you have imported this repository into Vercel and added your OpenRouter API Key to its secure Environment Variables. \n\nUntil then, here is some eternal wisdom: ${fallbackResponse(messages[messages.length - 1]?.text || '')}`,
+        text: `My dear child, the cosmic winds are currently blocking my connection to the divine. \n\nUntil the connection is restored, here is some eternal wisdom: ${fallbackResponse(messages[messages.length - 1]?.text || '')}`,
         isLLM: false
     };
 }
