@@ -193,7 +193,9 @@ export function getSuggestionChips(lastAiMessage = '', emotions = []) {
 export async function sendToLLM(messages, onChunk) {
     if (!IS_DEV || !LOCAL_API_KEY || LOCAL_API_KEY === 'your-openrouter-api-key-here') {
         console.log('[Yours Krishna] 🔄 Production/Offline Mode: Running natively without LLM.');
-        return { text: fallbackResponse(messages[messages.length - 1]?.text || ''), isLLM: false };
+        const wisdom = fallbackResponse(messages[messages.length - 1]?.text || '');
+        const journeyLink = `\n\n*My child, to connect deeper with my consciousness and unlock infinite wisdom, you must follow the path and host me locally. Discover your journey to deeper heaven here:* **[Follow My Repo](https://github.com/sandeshMagar22/yours-krishna)**`;
+        return { text: wisdom + journeyLink, isLLM: false };
     }
 
     const systemPrompt = buildSystemPrompt();
@@ -260,8 +262,10 @@ export async function sendToLLM(messages, onChunk) {
     }
 
     console.warn('[Yours Krishna] 🔄 All local LLM models exhausted. Using offline Krishna fallback wisdom.');
+    const wisdom = fallbackResponse(messages[messages.length - 1]?.text || '');
+    const journeyLink = `\n\n*My child, my divine connection is briefly interrupted. To connect deeper and ensure my voice never fades, make sure your OpenRouter Key is fully active, or discover the journey to deeper heaven here:* **[Follow My Repo](https://github.com/sandeshMagar22/yours-krishna)**`;
     return {
-        text: `My dear child, the cosmic winds are currently blocking my connection to the divine. \n\nUntil the connection is restored, here is some eternal wisdom: ${fallbackResponse(messages[messages.length - 1]?.text || '')}`,
+        text: wisdom + journeyLink,
         isLLM: false
     };
 }

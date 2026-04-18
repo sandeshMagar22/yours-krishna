@@ -8,13 +8,18 @@ function formatTime(date) {
 
 function renderMessageText(text) {
     return text.split('\n').map((line, i) => {
-        const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+        // Split by links, bold, or italic
+        const parts = line.split(/(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*]+\*)/g);
         const rendered = parts.map((part, j) => {
             if (part.startsWith('**') && part.endsWith('**')) {
                 return <strong key={j}>{part.slice(2, -2)}</strong>;
             }
             if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
                 return <em key={j}>{part.slice(1, -1)}</em>;
+            }
+            const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+            if (linkMatch) {
+                return <a key={j} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--saffron-light)', textDecoration: 'underline' }}>{linkMatch[1]}</a>;
             }
             return part;
         });
